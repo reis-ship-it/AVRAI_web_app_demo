@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import {
   ArrowLeft,
   BookmarkCheck,
+  BookmarkPlus,
   CalendarDays,
   Check,
   ChevronRight,
@@ -11,18 +12,22 @@ import {
   GraduationCap,
   HeartHandshake,
   LucideIcon,
+  Map as MapIcon,
   MapPin,
   MessageCircle,
   Mountain,
   Music,
+  Navigation,
   RotateCcw,
   Route,
   Share2,
   Sparkles,
+  Trash2,
   Users,
 } from "lucide-react";
 
-type Screen = "welcome" | "onboarding" | "feed" | "detail";
+type Screen = "welcome" | "onboarding" | "feed" | "map" | "week" | "detail";
+type MainScreen = "feed" | "map" | "week";
 type RecommendationType = "Event" | "Community" | "Place";
 type VisualVariant =
   | "hike"
@@ -57,6 +62,18 @@ type Recommendation = {
   socialTags: string[];
   visual: VisualVariant;
   priority: number;
+  map: {
+    x: number;
+    y: number;
+    zone: "Campus" | "Downtown" | "Park" | "Southside";
+    travel: string;
+  };
+  calendar: {
+    day: "Tuesday" | "Wednesday" | "Thursday" | "Friday" | "Saturday" | "Sunday" | "Weekend / Anytime";
+    start: string;
+    end: string;
+    bucket: string;
+  };
 };
 
 const initialProfile: Profile = {
@@ -110,6 +127,18 @@ const recommendations: Recommendation[] = [
     socialTags: ["Small, intimate groups", "Local city discoveries", "Just chill hangouts"],
     visual: "hike",
     priority: 10,
+    map: {
+      x: 20,
+      y: 38,
+      zone: "Campus",
+      travel: "Meet on campus, then carpool to Red Mountain.",
+    },
+    calendar: {
+      day: "Saturday",
+      start: "9:30 AM",
+      end: "12:00 PM",
+      bucket: "Morning outside",
+    },
   },
   {
     id: "chem-study",
@@ -128,6 +157,18 @@ const recommendations: Recommendation[] = [
     socialTags: ["Academic clubs", "Small, intimate groups"],
     visual: "study",
     priority: 9,
+    map: {
+      x: 31,
+      y: 45,
+      zone: "Campus",
+      travel: "Central campus, easiest by walking from residence halls.",
+    },
+    calendar: {
+      day: "Tuesday",
+      start: "6:00 PM",
+      end: "8:00 PM",
+      bucket: "Evening study block",
+    },
   },
   {
     id: "open-mic",
@@ -146,6 +187,18 @@ const recommendations: Recommendation[] = [
     socialTags: ["Local city discoveries", "Just chill hangouts"],
     visual: "coffee",
     priority: 8,
+    map: {
+      x: 71,
+      y: 38,
+      zone: "Downtown",
+      travel: "Downtown coffee stop, about a short ride from campus.",
+    },
+    calendar: {
+      day: "Thursday",
+      start: "7:30 PM",
+      end: "9:30 PM",
+      bucket: "Night culture",
+    },
   },
   {
     id: "railroad-volunteer",
@@ -164,6 +217,18 @@ const recommendations: Recommendation[] = [
     socialTags: ["Local city discoveries", "Small, intimate groups"],
     visual: "volunteer",
     priority: 7,
+    map: {
+      x: 61,
+      y: 67,
+      zone: "Park",
+      travel: "Railroad Park is an easy city-life first stop from UAB.",
+    },
+    calendar: {
+      day: "Sunday",
+      start: "10:00 AM",
+      end: "12:00 PM",
+      bucket: "Purposeful weekend",
+    },
   },
   {
     id: "board-game-lounge",
@@ -182,6 +247,18 @@ const recommendations: Recommendation[] = [
     socialTags: ["Small, intimate groups", "Just chill hangouts"],
     visual: "hangout",
     priority: 6,
+    map: {
+      x: 24,
+      y: 58,
+      zone: "Campus",
+      travel: "On campus at Hill Student Center.",
+    },
+    calendar: {
+      day: "Wednesday",
+      start: "8:00 PM",
+      end: "10:00 PM",
+      bucket: "Chill repeat hangout",
+    },
   },
   {
     id: "founder-friday",
@@ -200,6 +277,18 @@ const recommendations: Recommendation[] = [
     socialTags: ["Professional networking", "Small, intimate groups"],
     visual: "career",
     priority: 5,
+    map: {
+      x: 78,
+      y: 58,
+      zone: "Downtown",
+      travel: "Downtown meetup, best as a short ride with a friend.",
+    },
+    calendar: {
+      day: "Friday",
+      start: "4:00 PM",
+      end: "5:30 PM",
+      bucket: "Career momentum",
+    },
   },
   {
     id: "city-loop",
@@ -218,6 +307,18 @@ const recommendations: Recommendation[] = [
     socialTags: ["Local city discoveries", "Just chill hangouts"],
     visual: "city",
     priority: 4,
+    map: {
+      x: 66,
+      y: 50,
+      zone: "Downtown",
+      travel: "A flexible downtown loop anchored near Railroad Park.",
+    },
+    calendar: {
+      day: "Weekend / Anytime",
+      start: "10:00 AM",
+      end: "2:00 PM",
+      bucket: "Flexible city discovery",
+    },
   },
 ];
 
@@ -230,6 +331,16 @@ const visualIcons: Record<VisualVariant, LucideIcon> = {
   career: Compass,
   city: Music,
 };
+
+const weekOrder: Recommendation["calendar"]["day"][] = [
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+  "Sunday",
+  "Weekend / Anytime",
+];
 
 function scoreRecommendation(item: Recommendation, profile: Profile) {
   const interestScore = item.tags.filter((tag) => profile.interests.includes(tag)).length * 4;
@@ -301,10 +412,12 @@ function playPositiveFeedback() {
 
 function App() {
   const [screen, setScreen] = useState<Screen>("welcome");
+  const [detailReturnScreen, setDetailReturnScreen] = useState<MainScreen>("feed");
   const [onboardingStep, setOnboardingStep] = useState(0);
   const [profile, setProfile] = useState<Profile>(initialProfile);
   const [selectedRecommendation, setSelectedRecommendation] = useState<Recommendation | null>(null);
-  const [savedRecommendation, setSavedRecommendation] = useState<Recommendation | null>(null);
+  const [savedRecommendationIds, setSavedRecommendationIds] = useState<string[]>([]);
+  const [activeMapRecommendationId, setActiveMapRecommendationId] = useState(recommendations[0].id);
   const [toast, setToast] = useState("");
 
   const sortedRecommendations = useMemo(
@@ -315,32 +428,58 @@ function App() {
     [profile],
   );
 
+  const savedRecommendations = useMemo(
+    () =>
+      savedRecommendationIds
+        .map((id) => recommendations.find((item) => item.id === id))
+        .filter((item): item is Recommendation => Boolean(item)),
+    [savedRecommendationIds],
+  );
+
+  const latestSavedRecommendation = savedRecommendations[savedRecommendations.length - 1] ?? null;
+
   function showToast(message: string) {
     setToast(message);
     window.setTimeout(() => setToast(""), 2800);
   }
 
-  function openDetail(item: Recommendation) {
+  function navigateTo(nextScreen: MainScreen) {
+    setScreen(nextScreen);
+    setSelectedRecommendation(null);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function openDetail(item: Recommendation, returnScreen: MainScreen) {
     setSelectedRecommendation(item);
+    setDetailReturnScreen(returnScreen);
     setScreen("detail");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   function saveRecommendation(item: Recommendation) {
-    setSavedRecommendation(item);
+    if (savedRecommendationIds.includes(item.id)) {
+      showToast(`${item.title} is already in My Week.`);
+      return;
+    }
+
+    setSavedRecommendationIds((ids) => [...ids, item.id]);
     playPositiveFeedback();
     showToast(`${item.title} saved to My Week.`);
-    setScreen("feed");
-    setSelectedRecommendation(null);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function removeRecommendation(item: Recommendation) {
+    setSavedRecommendationIds((ids) => ids.filter((id) => id !== item.id));
+    showToast(`${item.title} removed from My Week.`);
   }
 
   function resetJourney() {
     setScreen("welcome");
+    setDetailReturnScreen("feed");
     setOnboardingStep(0);
     setProfile(initialProfile);
     setSelectedRecommendation(null);
-    setSavedRecommendation(null);
+    setSavedRecommendationIds([]);
+    setActiveMapRecommendationId(recommendations[0].id);
     setToast("");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -374,10 +513,37 @@ function App() {
         <FeedScreen
           profile={profile}
           recommendations={sortedRecommendations}
-          savedRecommendation={savedRecommendation}
-          onOpenDetail={openDetail}
+          savedRecommendations={savedRecommendations}
+          latestSavedRecommendation={latestSavedRecommendation}
+          savedRecommendationIds={savedRecommendationIds}
+          onOpenDetail={(item) => openDetail(item, "feed")}
+          onSave={saveRecommendation}
           onReset={resetJourney}
           onToast={showToast}
+          onNavigate={navigateTo}
+        />
+      )}
+
+      {screen === "map" && (
+        <MapScreen
+          profile={profile}
+          recommendations={sortedRecommendations}
+          savedRecommendationIds={savedRecommendationIds}
+          activeRecommendationId={activeMapRecommendationId}
+          onActivate={setActiveMapRecommendationId}
+          onOpenDetail={(item) => openDetail(item, "map")}
+          onSave={saveRecommendation}
+          onNavigate={navigateTo}
+        />
+      )}
+
+      {screen === "week" && (
+        <MyWeekScreen
+          profile={profile}
+          savedRecommendations={savedRecommendations}
+          onOpenDetail={(item) => openDetail(item, "week")}
+          onRemove={removeRecommendation}
+          onNavigate={navigateTo}
         />
       )}
 
@@ -385,9 +551,13 @@ function App() {
         <DetailScreen
           item={selectedRecommendation}
           profile={profile}
-          onBack={() => setScreen("feed")}
+          isSaved={savedRecommendationIds.includes(selectedRecommendation.id)}
+          activeScreen={detailReturnScreen}
+          savedCount={savedRecommendationIds.length}
+          onBack={() => setScreen(detailReturnScreen)}
           onSave={() => saveRecommendation(selectedRecommendation)}
           onToast={showToast}
+          onNavigate={navigateTo}
         />
       )}
 
@@ -589,23 +759,36 @@ function OnboardingScreen({
 function FeedScreen({
   profile,
   recommendations,
-  savedRecommendation,
+  savedRecommendations,
+  latestSavedRecommendation,
+  savedRecommendationIds,
   onOpenDetail,
+  onSave,
   onReset,
   onToast,
+  onNavigate,
 }: {
   profile: Profile;
   recommendations: Recommendation[];
-  savedRecommendation: Recommendation | null;
+  savedRecommendations: Recommendation[];
+  latestSavedRecommendation: Recommendation | null;
+  savedRecommendationIds: string[];
   onOpenDetail: (item: Recommendation) => void;
+  onSave: (item: Recommendation) => void;
   onReset: () => void;
   onToast: (message: string) => void;
+  onNavigate: (screen: MainScreen) => void;
 }) {
   const primaryInterest = profile.interests[0] ?? "campus life";
 
   return (
     <section className="feed-screen">
-      <AppHeader label="For You" />
+      <AppHeader
+        label="For You"
+        activeScreen="feed"
+        savedCount={savedRecommendations.length}
+        onNavigate={onNavigate}
+      />
       <div className="feed-hero">
         <div>
           <p className="eyebrow">AVRAI for {profile.university}</p>
@@ -621,14 +804,14 @@ function FeedScreen({
         </div>
       </div>
 
-      {savedRecommendation && (
+      {latestSavedRecommendation && (
         <section className="saved-panel" aria-live="polite">
           <div>
-            <p className="eyebrow">Saved to My Week</p>
-            <h2>{savedRecommendation.title}</h2>
+            <p className="eyebrow">{savedRecommendations.length} saved to My Week</p>
+            <h2>{latestSavedRecommendation.title}</h2>
             <p>
-              This is the moment AVRAI is testing: one recommendation that feels specific enough to
-              act on.
+              Latest save added. Open My Week to see the calendar view, or keep building a better
+              first week from the feed.
             </p>
           </div>
           <BookmarkCheck size={34} aria-hidden="true" />
@@ -658,11 +841,13 @@ function FeedScreen({
             rank={index + 1}
             profile={profile}
             onOpen={() => onOpenDetail(item)}
+            onSave={() => onSave(item)}
+            isSaved={savedRecommendationIds.includes(item.id)}
           />
         ))}
       </div>
 
-      {savedRecommendation && (
+      {savedRecommendations.length > 0 && (
         <section className="journey-end">
           <p className="eyebrow">Ready for another test run</p>
           <h2>Reset the prototype and try a different student profile.</h2>
@@ -681,11 +866,15 @@ function RecommendationCard({
   rank,
   profile,
   onOpen,
+  onSave,
+  isSaved,
 }: {
   item: Recommendation;
   rank: number;
   profile: Profile;
   onOpen: () => void;
+  onSave: () => void;
+  isSaved: boolean;
 }) {
   return (
     <article className="recommendation-card">
@@ -711,34 +900,306 @@ function RecommendationCard({
             {item.location}
           </span>
         </div>
-        <button className="card-action" type="button" onClick={onOpen}>
-          View why it fits
-          <ChevronRight size={18} aria-hidden="true" />
-        </button>
+        <div className="card-actions">
+          <button
+            className={isSaved ? "card-save-action saved" : "card-save-action"}
+            type="button"
+            onClick={onSave}
+          >
+            {isSaved ? <BookmarkCheck size={18} aria-hidden="true" /> : <BookmarkPlus size={18} aria-hidden="true" />}
+            {isSaved ? "Saved" : "Save to My Week"}
+          </button>
+          <button className="card-action" type="button" onClick={onOpen}>
+            View why it fits
+            <ChevronRight size={18} aria-hidden="true" />
+          </button>
+        </div>
       </div>
     </article>
+  );
+}
+
+function MapScreen({
+  profile,
+  recommendations,
+  savedRecommendationIds,
+  activeRecommendationId,
+  onActivate,
+  onOpenDetail,
+  onSave,
+  onNavigate,
+}: {
+  profile: Profile;
+  recommendations: Recommendation[];
+  savedRecommendationIds: string[];
+  activeRecommendationId: string;
+  onActivate: (id: string) => void;
+  onOpenDetail: (item: Recommendation) => void;
+  onSave: (item: Recommendation) => void;
+  onNavigate: (screen: MainScreen) => void;
+}) {
+  const activeRecommendation =
+    recommendations.find((item) => item.id === activeRecommendationId) ?? recommendations[0];
+
+  return (
+    <section className="map-screen">
+      <AppHeader
+        label="Map"
+        activeScreen="map"
+        savedCount={savedRecommendationIds.length}
+        onNavigate={onNavigate}
+      />
+      <div className="map-hero">
+        <div>
+          <p className="eyebrow">UAB to Birmingham</p>
+          <h1>See where each fit lives before you go.</h1>
+          <p>
+            A prototype map for planning the distance between campus life, downtown discoveries,
+            and outdoor spaces.
+          </p>
+        </div>
+        <button className="icon-text-button" type="button" onClick={() => onNavigate("week")}>
+          <CalendarDays size={18} aria-hidden="true" />
+          Open My Week
+        </button>
+      </div>
+
+      <div className="map-layout">
+        <div className="prototype-map" aria-label="Prototype map of AVRAI recommendations">
+          <span className="map-zone campus-zone">UAB Campus</span>
+          <span className="map-zone downtown-zone">Downtown</span>
+          <span className="map-zone park-zone">Parks + trails</span>
+          <span className="map-road road-one" />
+          <span className="map-road road-two" />
+          <span className="map-road road-three" />
+          {recommendations.map((item) => {
+            const isActive = item.id === activeRecommendation.id;
+            const isSaved = savedRecommendationIds.includes(item.id);
+
+            return (
+              <button
+                key={item.id}
+                className={isActive ? "map-pin active" : "map-pin"}
+                style={{ left: `${item.map.x}%`, top: `${item.map.y}%` }}
+                type="button"
+                onClick={() => onActivate(item.id)}
+                aria-label={`Select ${item.title}`}
+              >
+                <MapPin size={22} aria-hidden="true" />
+                {isSaved && <span className="pin-saved-dot" />}
+              </button>
+            );
+          })}
+        </div>
+
+        <aside className="map-panel" aria-label="Selected recommendation">
+          <p className="eyebrow">Selected location</p>
+          <h2>{activeRecommendation.title}</h2>
+          <div className="fit-chip">
+            <Sparkles size={15} aria-hidden="true" />
+            {fitLabel(activeRecommendation, profile)}
+          </div>
+          <div className="meta-list">
+            <span>
+              <CalendarDays size={16} aria-hidden="true" />
+              {activeRecommendation.time}
+            </span>
+            <span>
+              <MapPin size={16} aria-hidden="true" />
+              {activeRecommendation.location}
+            </span>
+            <span>
+              <Navigation size={16} aria-hidden="true" />
+              {activeRecommendation.map.travel}
+            </span>
+          </div>
+          <div className="map-panel-actions">
+            <button
+              className={
+                savedRecommendationIds.includes(activeRecommendation.id)
+                  ? "card-save-action saved"
+                  : "card-save-action"
+              }
+              type="button"
+              onClick={() => onSave(activeRecommendation)}
+            >
+              {savedRecommendationIds.includes(activeRecommendation.id) ? (
+                <BookmarkCheck size={18} aria-hidden="true" />
+              ) : (
+                <BookmarkPlus size={18} aria-hidden="true" />
+              )}
+              {savedRecommendationIds.includes(activeRecommendation.id) ? "Saved" : "Save to My Week"}
+            </button>
+            <button className="card-action" type="button" onClick={() => onOpenDetail(activeRecommendation)}>
+              View details
+              <ChevronRight size={18} aria-hidden="true" />
+            </button>
+          </div>
+        </aside>
+      </div>
+
+      <div className="map-location-list">
+        {recommendations.map((item) => (
+          <button
+            key={item.id}
+            className={item.id === activeRecommendation.id ? "location-row active" : "location-row"}
+            type="button"
+            onClick={() => onActivate(item.id)}
+          >
+            <span>{item.map.zone}</span>
+            <strong>{item.title}</strong>
+            <small>{item.location}</small>
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function MyWeekScreen({
+  profile,
+  savedRecommendations,
+  onOpenDetail,
+  onRemove,
+  onNavigate,
+}: {
+  profile: Profile;
+  savedRecommendations: Recommendation[];
+  onOpenDetail: (item: Recommendation) => void;
+  onRemove: (item: Recommendation) => void;
+  onNavigate: (screen: MainScreen) => void;
+}) {
+  const groupedItems = weekOrder
+    .map((day) => ({
+      day,
+      items: savedRecommendations.filter((item) => item.calendar.day === day),
+    }))
+    .filter((group) => group.items.length > 0);
+
+  return (
+    <section className="week-screen">
+      <AppHeader
+        label="My Week"
+        activeScreen="week"
+        savedCount={savedRecommendations.length}
+        onNavigate={onNavigate}
+      />
+      <div className="week-hero">
+        <div>
+          <p className="eyebrow">Saved plans for {profile.university}</p>
+          <h1>Build a week that feels possible.</h1>
+          <p>
+            My Week is a prototype calendar: it keeps the opportunities you saved in one calm place
+            before anything touches a real calendar.
+          </p>
+        </div>
+        <div className="week-count">
+          <strong>{savedRecommendations.length}</strong>
+          <span>{savedRecommendations.length === 1 ? "saved fit" : "saved fits"}</span>
+        </div>
+      </div>
+
+      {savedRecommendations.length === 0 ? (
+        <section className="empty-week">
+          <CalendarDays size={44} aria-hidden="true" />
+          <h2>No plans saved yet.</h2>
+          <p>
+            Save something from For You or use the Map to choose a plan based on where it happens.
+          </p>
+          <div className="empty-actions">
+            <button className="primary-action" type="button" onClick={() => onNavigate("feed")}>
+              <Sparkles size={18} aria-hidden="true" />
+              Browse For You
+            </button>
+            <button className="secondary-action" type="button" onClick={() => onNavigate("map")}>
+              <MapIcon size={18} aria-hidden="true" />
+              Open Map
+            </button>
+          </div>
+        </section>
+      ) : (
+        <div className="calendar-board">
+          {groupedItems.map((group) => (
+            <section className="day-column" key={group.day}>
+              <div className="day-heading">
+                <span>{group.day}</span>
+                <small>{group.items.length} saved</small>
+              </div>
+              <div className="week-item-list">
+                {group.items.map((item) => (
+                  <article className="week-item" key={item.id}>
+                    <div className="week-item-time">
+                      <Clock size={16} aria-hidden="true" />
+                      <span>{item.calendar.start}</span>
+                    </div>
+                    <div className="week-item-body">
+                      <span className="type-badge">{item.type}</span>
+                      <h3>{item.title}</h3>
+                      <p>{item.calendar.bucket}</p>
+                      <div className="meta-list">
+                        <span>
+                          <CalendarDays size={16} aria-hidden="true" />
+                          {item.calendar.start} to {item.calendar.end}
+                        </span>
+                        <span>
+                          <MapPin size={16} aria-hidden="true" />
+                          {item.location}
+                        </span>
+                      </div>
+                      <div className="week-item-actions">
+                        <button className="icon-text-button" type="button" onClick={() => onOpenDetail(item)}>
+                          View details
+                          <ChevronRight size={18} aria-hidden="true" />
+                        </button>
+                        <button className="danger-action" type="button" onClick={() => onRemove(item)}>
+                          <Trash2 size={18} aria-hidden="true" />
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </section>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 
 function DetailScreen({
   item,
   profile,
+  isSaved,
+  activeScreen,
+  savedCount,
   onBack,
   onSave,
   onToast,
+  onNavigate,
 }: {
   item: Recommendation;
   profile: Profile;
+  isSaved: boolean;
+  activeScreen: MainScreen;
+  savedCount: number;
   onBack: () => void;
   onSave: () => void;
   onToast: (message: string) => void;
+  onNavigate: (screen: MainScreen) => void;
 }) {
   return (
     <section className="detail-screen">
-      <AppHeader label={item.type} />
+      <AppHeader
+        label={item.type}
+        activeScreen={activeScreen}
+        savedCount={savedCount}
+        onNavigate={onNavigate}
+      />
       <button className="back-link" type="button" onClick={onBack}>
         <ArrowLeft size={18} aria-hidden="true" />
-        Back to For You
+        Back to {activeScreen === "feed" ? "For You" : activeScreen === "map" ? "Map" : "My Week"}
       </button>
       <RecommendationArt visual={item.visual} large />
       <div className="detail-body">
@@ -774,9 +1235,13 @@ function DetailScreen({
         </section>
 
         <div className="detail-actions">
-          <button className="primary-action save-action" type="button" onClick={onSave}>
-            <BookmarkCheck size={20} aria-hidden="true" />
-            Save to My Week
+          <button
+            className={isSaved ? "primary-action save-action saved" : "primary-action save-action"}
+            type="button"
+            onClick={onSave}
+          >
+            {isSaved ? <BookmarkCheck size={20} aria-hidden="true" /> : <BookmarkPlus size={20} aria-hidden="true" />}
+            {isSaved ? "Saved in My Week" : "Save to My Week"}
           </button>
           <button
             className="secondary-action"
@@ -828,14 +1293,54 @@ function InfoItem({ icon: Icon, label, value }: { icon: LucideIcon; label: strin
   );
 }
 
-function AppHeader({ label }: { label: string }) {
+function AppHeader({
+  label,
+  activeScreen,
+  savedCount = 0,
+  onNavigate,
+}: {
+  label: string;
+  activeScreen?: MainScreen;
+  savedCount?: number;
+  onNavigate?: (screen: MainScreen) => void;
+}) {
   return (
     <header className="app-header">
       <div className="brand-row small">
         <span className="brand-mark">A</span>
         <span>AVRAI</span>
       </div>
-      <span>{label}</span>
+      {activeScreen && onNavigate ? (
+        <nav className="top-nav" aria-label="AVRAI views">
+          <button
+            className={activeScreen === "feed" ? "top-nav-button active" : "top-nav-button"}
+            type="button"
+            onClick={() => onNavigate("feed")}
+          >
+            <Sparkles size={17} aria-hidden="true" />
+            For You
+          </button>
+          <button
+            className={activeScreen === "map" ? "top-nav-button active" : "top-nav-button"}
+            type="button"
+            onClick={() => onNavigate("map")}
+          >
+            <MapIcon size={17} aria-hidden="true" />
+            Map
+          </button>
+          <button
+            className={activeScreen === "week" ? "top-nav-button active" : "top-nav-button"}
+            type="button"
+            onClick={() => onNavigate("week")}
+          >
+            <CalendarDays size={17} aria-hidden="true" />
+            My Week
+            {savedCount > 0 && <span className="nav-count">{savedCount}</span>}
+          </button>
+        </nav>
+      ) : (
+        <span>{label}</span>
+      )}
     </header>
   );
 }
